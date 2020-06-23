@@ -687,12 +687,14 @@ func (worksheet *xlsxWorksheet) makeXlsxRowFromRow(row *Row, styles *xlsxStyleSh
 			// This is what Excel does as well.
 			fallthrough
 		case CellTypeString:
+			xC.T = "s"
 			if len(cell.Value) > 0 {
 				xC.V = strconv.Itoa(refTable.AddString(cell.Value))
 			} else if len(cell.RichText) > 0 {
 				xC.V = strconv.Itoa(refTable.AddRichText(cell.RichText))
+			} else {
+				xC.T = ""
 			}
-			xC.T = "s"
 		case CellTypeNumeric:
 			// Numeric is the default, so the type can be left blank
 			xC.V = cell.Value
