@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 
 	"github.com/shabbyrobe/xmlwriter"
 )
@@ -51,7 +52,7 @@ func NewSheetWithCellStore(name string, constructor CellStoreConstructor) (*Shee
 
 }
 
-// Remove Sheet's dependant resources - if you are done with operations on a sheet this should be called to clear down the Sheet's persistent cache.  Typically this happens *after* you've saved your changes.
+// Remove Sheet's dependant resources - if you are done with operations on a sheet this should be called to clear down the Sheet's persistent cache.  Note: if you call this, all further read operaton on the sheet will fail - including any attempt to save the file, or dump it's contents to a byte stream.  Therefore only call this *after* you've saved your changes, of when you're done reading a sheet in a file you don't plan to persist. 
 func (s *Sheet) Close() {
 	s.cellStore.Close()
 	s.cellStore = nil
@@ -117,13 +118,10 @@ func (s *Sheet) addRelation(relType RelationshipType, target string, targetMode 
 }
 
 func (s *Sheet) setCurrentRow(r *Row) {
-	if r == nil {
+	if r != nil && r == s.currentRow {
 		return
 	}
-	if r.num > s.MaxRow {
-		s.MaxRow = r.num + 1
-	}
-	if s.currentRow != nil {
+	if s.currentRow != nil && s.currentRow.isCustom {
 		err := s.cellStore.WriteRow(s.currentRow)
 		if err != nil {
 			panic(err)
@@ -150,16 +148,26 @@ func SkipEmptyRows(flags *rowVisitorFlags) {
 // Sheet.ForEachRow, it will be called once for every Row visited.
 type RowVisitor func(r *Row) error
 
+func (s *Sheet) mustBeOpen() {
+	if s.cellStore == nil {
+		panic("Attempt to iterate over sheet with no cellstore. Perhaps you called Close() on this sheet?")
+	}
+}
+
 func (s *Sheet) ForEachRow(rv RowVisitor, options ...RowVisitorOption) error {
+	s.mustBeOpen()
 	flags := &rowVisitorFlags{}
 	for _, opt := range options {
 		opt(flags)
 	}
 	if s.currentRow != nil {
-		s.cellStore.WriteRow(s.currentRow)
+		err := s.cellStore.WriteRow(s.currentRow)
+		if err != nil {
+			return err
+		}
 	}
 	for i := 0; i < s.MaxRow; i++ {
-		r, err := s.cellStore.ReadRow(makeRowKey(s, i))
+		r, err := s.cellStore.ReadRow(makeRowKey(s, i), s)
 		if err != nil {
 			if _, ok := err.(*RowNotFoundError); !ok {
 				return err
@@ -168,9 +176,10 @@ func (s *Sheet) ForEachRow(rv RowVisitor, options ...RowVisitorOption) error {
 			if flags.skipEmptyRows {
 				continue
 			}
-			r = &Row{num: i}
+			r = s.cellStore.MakeRow(s)
+			r.num = i
 		}
-		if r.cellCount == 0 && flags.skipEmptyRows {
+		if r.cellStoreRow.CellCount() == 0 && flags.skipEmptyRows {
 			continue
 		}
 		r.Sheet = s
@@ -185,13 +194,15 @@ func (s *Sheet) ForEachRow(rv RowVisitor, options ...RowVisitorOption) error {
 
 // Add a new Row to a Sheet
 func (s *Sheet) AddRow() *Row {
+	s.mustBeOpen()
 	// NOTE - this is not safe to use concurrently
 	if s.currentRow != nil {
 		s.cellStore.WriteRow(s.currentRow)
 	}
-	row := &Row{Sheet: s, num: s.MaxRow}
-	s.setCurrentRow(row)
+	row := s.cellStore.MakeRow(s)
+	row.num = s.MaxRow
 	s.MaxRow++
+	s.setCurrentRow(row)
 	return row
 }
 
@@ -201,6 +212,7 @@ func makeRowKey(s *Sheet, i int) string {
 
 // Add a new Row to a Sheet at a specific index
 func (s *Sheet) AddRowAtIndex(index int) (*Row, error) {
+	s.mustBeOpen()
 	if index < 0 || index > s.MaxRow {
 		return nil, errors.New("AddRowAtIndex: index out of bounds")
 	}
@@ -211,14 +223,17 @@ func (s *Sheet) AddRowAtIndex(index int) (*Row, error) {
 
 	// We move rows in reverse order to avoid overwriting anyting
 	for i := (s.MaxRow - 1); i >= index; i-- {
-		nRow, err := s.cellStore.ReadRow(makeRowKey(s, i))
+		nRow, err := s.cellStore.ReadRow(makeRowKey(s, i), s)
 		if err != nil {
 			continue
 		}
 		nRow.Sheet = s
+		s.setCurrentRow(nRow)
 		s.cellStore.MoveRow(nRow, i+1)
 	}
-	row := &Row{Sheet: s, num: index}
+	row := s.cellStore.MakeRow(s)
+	row.num = index
+	s.setCurrentRow(row)
 	err := s.cellStore.WriteRow(row)
 	if err != nil {
 		return nil, err
@@ -229,27 +244,25 @@ func (s *Sheet) AddRowAtIndex(index int) (*Row, error) {
 
 // Add a DataValidation to a range of cells
 func (s *Sheet) AddDataValidation(dv *xlsxDataValidation) {
+	s.mustBeOpen()
 	s.DataValidations = append(s.DataValidations, dv)
 }
 
 // Removes a row at a specific index
 func (s *Sheet) RemoveRowAtIndex(index int) error {
+	s.mustBeOpen()
 	if index < 0 || index >= s.MaxRow {
 		return fmt.Errorf("Cannot remove row: index out of range: %d", index)
 	}
 	if s.currentRow != nil {
-		if index == s.currentRow.num {
-			s.currentRow = nil
-		} else {
-			s.cellStore.WriteRow(s.currentRow)
-		}
+		s.setCurrentRow(nil)
 	}
 	err := s.cellStore.RemoveRow(makeRowKey(s, index))
 	if err != nil {
 		return err
 	}
 	for i := index + 1; i < s.MaxRow; i++ {
-		nRow, err := s.cellStore.ReadRow(makeRowKey(s, i))
+		nRow, err := s.cellStore.ReadRow(makeRowKey(s, i), s)
 		if err != nil {
 			continue
 		}
@@ -257,17 +270,17 @@ func (s *Sheet) RemoveRowAtIndex(index int) error {
 		s.cellStore.MoveRow(nRow, i-1)
 	}
 	s.MaxRow--
-
 	return nil
 }
 
 // Make sure we always have as many Rows as we do cells.
 func (s *Sheet) maybeAddRow(rowCount int) {
+	s.mustBeOpen()
 	if rowCount > s.MaxRow {
 		loopCnt := rowCount - s.MaxRow
 		for i := 0; i < loopCnt; i++ {
-
-			row := &Row{Sheet: s, num: i, cells: make([]*Cell, 0)}
+			row := s.cellStore.MakeRow(s)
+			row.num = i
 			s.setCurrentRow(row)
 		}
 		s.MaxRow = rowCount
@@ -276,18 +289,20 @@ func (s *Sheet) maybeAddRow(rowCount int) {
 
 // Make sure we always have as many Rows as we do cells.
 func (s *Sheet) Row(idx int) (*Row, error) {
+	s.mustBeOpen()
 	s.maybeAddRow(idx + 1)
 	if s.currentRow != nil && idx == s.currentRow.num {
 		return s.currentRow, nil
 	}
-	r, err := s.cellStore.ReadRow(makeRowKey(s, idx))
+	r, err := s.cellStore.ReadRow(makeRowKey(s, idx), s)
 	if err != nil {
 		if _, ok := err.(*RowNotFoundError); !ok {
 			return nil, err
 		}
 	}
 	if r == nil {
-		r = &Row{Sheet: s, num: idx}
+		r = s.cellStore.MakeRow(s)
+		r.num = idx
 	} else {
 		r.Sheet = s
 	}
@@ -297,6 +312,7 @@ func (s *Sheet) Row(idx int) (*Row, error) {
 
 // Return the Col that applies to this Column index, or return nil if no such Col exists
 func (s *Sheet) Col(idx int) *Col {
+	s.mustBeOpen()
 	if s.Cols == nil {
 		panic("trying to use uninitialised ColStore")
 	}
@@ -313,7 +329,7 @@ func (s *Sheet) Col(idx int) *Col {
 // ... would set the variable "cell" to contain a Cell struct
 // containing the data from the field "A1" on the spreadsheet.
 func (s *Sheet) Cell(row, col int) (*Cell, error) {
-
+	s.mustBeOpen()
 	// If the user requests a row beyond what we have, then extend.
 	for s.MaxRow <= row {
 		s.AddRow()
@@ -331,6 +347,7 @@ func (s *Sheet) Cell(row, col int) (*Cell, error) {
 //Set the parameters of a column.  Parameters are passed as a pointer
 //to a Col structure which you much construct yourself.
 func (s *Sheet) SetColParameters(col *Col) {
+	s.mustBeOpen()
 	if s.Cols == nil {
 		panic("trying to use uninitialised ColStore")
 	}
@@ -338,6 +355,7 @@ func (s *Sheet) SetColParameters(col *Col) {
 }
 
 func (s *Sheet) setCol(min, max int, setter func(col *Col)) {
+	s.mustBeOpen()
 	if s.Cols == nil {
 		panic("trying to use uninitialised ColStore")
 	}
@@ -385,13 +403,49 @@ func (s *Sheet) setCol(min, max int, setter func(col *Col)) {
 
 // Set the width of a range of columns.
 func (s *Sheet) SetColWidth(min, max int, width float64) {
+	s.mustBeOpen()
 	s.setCol(min, max, func(col *Col) {
 		col.SetWidth(width)
 	})
 }
 
+// This can be use as the default scale function for the autowidth.
+// It works well with the default font sizes.
+func DefaultAutoWidth(s string) float64 {
+	return (float64(strings.Count(s, "")) + 3.0 ) * 1.2
+}
+
+// Tries to guess the best width for a column, based on the largest
+// cell content. A scale function needs to be provided.
+func (s *Sheet) SetColAutoWidth(colIndex int, width func (string) float64) error {
+	s.mustBeOpen()
+	largestWidth := 0.0
+	rowVisitor := func (r *Row) error {
+		cell := r.GetCell(colIndex)
+		value, err := cell.FormattedValue()
+		if err != nil {
+			return err
+		}
+
+		if width(value) > largestWidth {
+			largestWidth = width(value)
+		}
+		return nil
+	}
+	err := s.ForEachRow(rowVisitor)
+
+	if err != nil {
+		return err
+	}
+
+	s.SetColWidth(colIndex, colIndex, largestWidth)
+
+	return nil
+}
+
 // Set the outline level for a range of columns.
 func (s *Sheet) SetOutlineLevel(minCol, maxCol int, outlineLevel uint8) {
+	s.mustBeOpen()
 	s.setCol(minCol, maxCol, func(col *Col) {
 		col.SetOutlineLevel(outlineLevel)
 	})
@@ -399,6 +453,7 @@ func (s *Sheet) SetOutlineLevel(minCol, maxCol int, outlineLevel uint8) {
 
 // Set the type for a range of columns.
 func (s *Sheet) SetType(minCol, maxCol int, cellType CellType) {
+	s.mustBeOpen()
 	s.setCol(minCol, maxCol, func(col *Col) {
 		col.SetType(cellType)
 	})
@@ -468,6 +523,7 @@ func (s *Sheet) makeSheetFormatPr(worksheet *xlsxWorksheet) {
 
 //
 func (s *Sheet) makeCols(worksheet *xlsxWorksheet, styles *xlsxStyleSheet) (maxLevelCol uint8) {
+	s.mustBeOpen()
 	maxLevelCol = 0
 	if s.Cols == nil {
 		panic("trying to use uninitialised ColStore")
@@ -498,8 +554,8 @@ func (s *Sheet) makeCols(worksheet *xlsxWorksheet, styles *xlsxStyleSheet) (maxL
 			}
 			worksheet.Cols.Col = append(worksheet.Cols.Col,
 				xlsxCol{
-					Min:          col.Min + 1,
-					Max:          col.Max + 1,
+					Min:          col.Min,
+					Max:          col.Max,
 					Hidden:       col.Hidden,
 					Width:        col.Width,
 					CustomWidth:  col.CustomWidth,
@@ -523,6 +579,7 @@ func (s *Sheet) prepSheetForMarshalling(maxLevelCol uint8) {
 }
 
 func (s *Sheet) prepWorksheetFromRows(worksheet *xlsxWorksheet, relations *xlsxWorksheetRels) error {
+	s.mustBeOpen()
 	var maxCell, maxRow int
 
 	prepRow := func(row *Row) error {
@@ -550,9 +607,11 @@ func (s *Sheet) prepWorksheetFromRows(worksheet *xlsxWorksheet, relations *xlsxW
 				}
 
 				var relId string
-				for _, rel := range relations.Relationships {
-					if rel.Target == cell.Hyperlink.Link {
-						relId = rel.Id
+				if relations != nil && relations.Relationships != nil {
+					for _, rel := range relations.Relationships {
+						if rel.Target == cell.Hyperlink.Link {
+							relId = rel.Id
+						}
 					}
 				}
 
@@ -610,6 +669,7 @@ func (s *Sheet) prepWorksheetFromRows(worksheet *xlsxWorksheet, relations *xlsxW
 }
 
 func (s *Sheet) makeRows(worksheet *xlsxWorksheet, styles *xlsxStyleSheet, refTable *RefTable, relations *xlsxWorksheetRels, maxLevelCol uint8) error {
+	s.mustBeOpen()
 	maxRow := 0
 	maxCell := 0
 	var maxLevelRow uint8
@@ -781,6 +841,7 @@ func (s *Sheet) makeRows(worksheet *xlsxWorksheet, styles *xlsxStyleSheet, refTa
 }
 
 func (s *Sheet) makeDataValidations(worksheet *xlsxWorksheet) {
+	s.mustBeOpen()
 	if len(s.DataValidations) > 0 {
 		if worksheet.DataValidations == nil {
 			worksheet.DataValidations = &xlsxDataValidations{}
@@ -819,6 +880,7 @@ func (s *Sheet) MarshalSheet(w io.Writer, refTable *RefTable, styles *xlsxStyleS
 
 // Dump sheet to its XML representation, intended for internal use only
 func (s *Sheet) makeXLSXSheet(refTable *RefTable, styles *xlsxStyleSheet, relations *xlsxWorksheetRels) *xlsxWorksheet {
+	s.mustBeOpen()
 	worksheet := newXlsxWorksheet()
 
 	// Scan through the sheet and see if there are any merged cells. If there

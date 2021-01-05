@@ -171,7 +171,7 @@ func (f *File) Write(writer io.Writer) error {
 // The maximum sheet name length is 31 characters. If the sheet name length is exceeded an error is thrown.
 // These special characters are also not allowed: : \ / ? * [ ]
 func (f *File) AddSheet(sheetName string) (*Sheet, error) {
-	return f.AddSheetWithCellStore(sheetName, NewMemoryCellStore)
+	return f.AddSheetWithCellStore(sheetName, f.cellStoreConstructor)
 }
 
 func (f *File) AddSheetWithCellStore(sheetName string, constructor CellStoreConstructor) (*Sheet, error) {
@@ -441,10 +441,12 @@ func (f *File) MarshallParts(zipWriter *zip.Writer) error {
 		return wrap(err)
 	}
 	for _, sheet := range f.Sheets {
-		// Make sure we don't lose the current state!
-		err := sheet.cellStore.WriteRow(sheet.currentRow)
-		if err != nil {
-			return wrap(err)
+		if sheet.currentRow != nil {
+			// Make sure we don't lose the current state!
+			err := sheet.cellStore.WriteRow(sheet.currentRow)
+			if err != nil {
+				return wrap(err)
+			}
 		}
 
 		xSheetRels := sheet.makeXLSXSheetRelations()

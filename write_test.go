@@ -3,10 +3,12 @@ package xlsx
 import (
 	"database/sql"
 	"math"
+	"path/filepath"
 	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/pkg/profile"
 )
 
 type testStringerImpl struct {
@@ -281,4 +283,61 @@ func TestWrite(t *testing.T) {
 		c.Assert(e11Null, qt.Equals, nil)
 		c.Assert(c11Null, qt.Equals, "")
 	})
+}
+
+func TestBigWrite(t *testing.T) {
+	t.SkipNow()
+	c := qt.New(t)
+	p := profile.Start(profile.MemProfile)
+
+	testDir := c.Mkdir()
+
+	path := filepath.Join(testDir, "test.xlsx")
+
+	f := NewFile(UseDiskVCellStore)
+	s, err := f.AddSheet("big")
+	c.Assert(err, qt.Equals, nil)
+
+	for ri := 0; ri < 16384; ri++ {
+		r := s.AddRow()
+		for ci := 0; ci < 200; ci++ {
+			c := r.AddCell()
+			c.SetInt64(int64(ri * ci))
+		}
+	}
+
+	err = f.Save(path)
+	p.Stop()
+	c.Assert(err, qt.Equals, nil)
+
+}
+
+
+func TestWriteFileWithUnvisitedSheets(t *testing.T) {
+	c := qt.New(t)
+
+	// Issue 644 occured because we were checking the currentRow
+	// on sheets that hadn't been visitied and thus had no current
+	// row set.
+	csRunO(c, "Test for panic", func(c *qt.C, opt FileOption) {
+		fileToOpen := filepath.Join("testdocs", "testfile.xlsx")
+		// open an existing file
+		wbFile, err := OpenFile(fileToOpen, opt) 
+		c.Assert(err, qt.IsNil)
+
+		sheetName := "Tabelle1"
+		sh, ok := wbFile.Sheet[sheetName]
+		c.Assert(ok, qt.Equals, true)
+		colNum, rowNum, _ := GetCoordsFromCellIDString("DD3000")
+		cell, err := sh.Cell(rowNum, colNum)
+		c.Assert(err, qt.IsNil)
+		cell.SetInt64(39491)
+
+		testDir := c.Mkdir()
+		path := filepath.Join(testDir, "test.xlsx")
+
+		// With issue 644 this line would panic
+		err = wbFile.Save(path) 
+		c.Assert(err, qt.IsNil)
+ 	})
 }
