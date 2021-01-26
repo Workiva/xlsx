@@ -82,7 +82,7 @@ func ColIndexToLetters(n int) string {
 
 	for n > 0 {
 		n -= 1
-		l := n%26
+		l := n % 26
 		s = string('A'+rune(l)) + s
 		n /= 26
 	}
@@ -783,15 +783,15 @@ func readSheetsFromZipFile(f *zip.File, file *File, sheetXMLMap map[string]strin
 
 	for i, rawsheet := range workbookSheets {
 		i, rawsheet := i, rawsheet
-		go func() {
+		go func(idx int) {
 			sheet, err := readSheetFromFile(rawsheet, file,
 				sheetXMLMap, rowLimit)
 			sheetChan <- &indexedSheet{
-				Index: i,
+				Index: idx,
 				Sheet: sheet,
 				Error: err,
 			}
-		}()
+		}(i)
 	}
 
 	for j := 0; j < sheetCount; j++ {
