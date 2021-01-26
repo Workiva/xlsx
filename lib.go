@@ -781,17 +781,16 @@ func readSheetsFromZipFile(f *zip.File, file *File, sheetXMLMap map[string]strin
 	sheets := make([]*Sheet, sheetCount)
 	sheetChan := make(chan *indexedSheet, sheetCount)
 
-	for i, rawsheet := range workbookSheets {
-		i, rawsheet := i, rawsheet
-		go func(idx int) {
-			sheet, err := readSheetFromFile(rawsheet, file,
+	for i, rawSheet := range workbookSheets {
+		go func(idx int, rSheet xlsxSheet) {
+			sheet, err := readSheetFromFile(rSheet, file,
 				sheetXMLMap, rowLimit)
 			sheetChan <- &indexedSheet{
 				Index: idx,
 				Sheet: sheet,
 				Error: err,
 			}
-		}(i)
+		}(i, rawSheet)
 	}
 
 	for j := 0; j < sheetCount; j++ {
