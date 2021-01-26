@@ -336,7 +336,7 @@ func (styles *xlsxStyleSheet) argbValue(color xlsxColor) string {
 	if color.Theme != nil && styles.theme != nil {
 		return styles.theme.themeColor(int64(*color.Theme), color.Tint)
 	}
-	if color.Indexed != nil && styles.Colors != nil {
+	if color.Indexed != nil && *color.Indexed != 0 && styles.Colors != nil {
 		return styles.Colors.indexedColor(*color.Indexed)
 	}
 	return color.RGB
