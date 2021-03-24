@@ -237,7 +237,64 @@ func TestLib(t *testing.T) {
 		worksheet := new(xlsxWorksheet)
 		err := xml.NewDecoder(sheetxml).Decode(worksheet)
 		c.Assert(err, qt.IsNil)
-		minx, miny, maxx, maxy, err := calculateMaxMinFromWorksheet(worksheet)
+		minx, miny, maxx, maxy := calculateMaxMinFromWorksheet(worksheet)
+		c.Assert(err, qt.IsNil)
+		c.Assert(minx, qt.Equals, 0)
+		c.Assert(miny, qt.Equals, 0)
+		c.Assert(maxx, qt.Equals, 1)
+		c.Assert(maxy, qt.Equals, 1)
+	})
+
+	c.Run("GetRangeFromString", func(c *qt.C) {
+		var rangeString string
+		var lower, upper int
+		var err error
+		rangeString = "1:3"
+		lower, upper, err = getRangeFromString(rangeString)
+		c.Assert(err, qt.IsNil)
+		c.Assert(lower, qt.Equals, 1)
+		c.Assert(upper, qt.Equals, 3)
+	})
+
+	c.Run("CalculateMaxMinFromWorksheet - no cell id", func(c *qt.C) {
+		var sheetxml = bytes.NewBufferString(`
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"
+           xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"
+           xmlns:mx="http://schemas.microsoft.com/office/mac/excel/2008/main"
+           xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+           xmlns:mv="urn:schemas-microsoft-com:mac:vml"
+           xmlns:x14="http://schemas.microsoft.com/office/spreadsheetml/2009/9/main"
+           xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac"
+           xmlns:xm="http://schemas.microsoft.com/office/excel/2006/main">
+  <sheetViews>
+    <sheetView workbookViewId="0"/>
+  </sheetViews>
+  <sheetFormatPr customHeight="1" defaultColWidth="14.43" defaultRowHeight="15.75"/>
+  <sheetData>
+    <row r="1">
+      <c t="s" s="1" r="">
+        <v>0</v>
+      </c>
+      <c t="s" s="1" r="">
+        <v>1</v>
+      </c>
+    </row>
+    <row r="2">
+      <c t="s" s="1" r="">
+        <v>2</v>
+      </c>
+      <c t="s" s="1" r="">
+        <v>3</v>
+      </c>
+    </row>
+  </sheetData>
+  <drawing r:id="rId1"/>
+</worksheet>`)
+		worksheet := new(xlsxWorksheet)
+		err := xml.NewDecoder(sheetxml).Decode(worksheet)
+		c.Assert(err, qt.IsNil)
+		minx, miny, maxx, maxy := calculateMaxMinFromWorksheet(worksheet)
 		c.Assert(err, qt.IsNil)
 		c.Assert(minx, qt.Equals, 0)
 		c.Assert(miny, qt.Equals, 0)
