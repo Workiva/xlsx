@@ -530,18 +530,18 @@ func readRowsFromSheet(Worksheet *xlsxWorksheet, file *File, sheet *Sheet, rowLi
 
 		for cellIndex, rawcell := range rawrow.C {
 			var x, y, h, v int
-			if rawcell.R == "" {
-				x, y = cellIndex, rowIndex
-				h, v = cellIndex, rowIndex
-			} else {
-				h, v, err = Worksheet.MergeCells.getExtent(rawcell.R)
-				if err != nil {
-					return wrap(err)
-				}
-				x, y, err = GetCoordsFromCellIDString(rawcell.R)
-				if err != nil {
-					return wrap(err)
-				}
+			cellR := rawcell.R
+			if cellR == "" {
+				cellR = GetCellIDStringFromCoords(cellIndex, rowIndex)
+			}
+
+			h, v, err = Worksheet.MergeCells.getExtent(cellR)
+			if err != nil {
+				return wrap(err)
+			}
+			x, y, err = GetCoordsFromCellIDString(cellR)
+			if err != nil {
+				return wrap(err)
 			}
 
 			cellX := x
