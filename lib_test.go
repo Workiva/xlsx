@@ -588,6 +588,76 @@ func TestLib(t *testing.T) {
 		}
 	})
 
+	csRunC(c, "ReadRowsFromSheetWithNoRegionValuesOrDimension", func(c *qt.C, constructor CellStoreConstructor) {
+		var sharedstringsXML = bytes.NewBufferString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2"><si><t>ABC</t></si><si><t>DEF</t></si></sst>`)
+		var sheetxml = bytes.NewBufferString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006" mc:Ignorable="x14ac" xmlns:x14ac="http://schemas.microsoft.com/office/spreadsheetml/2009/9/ac">
+  <sheetViews>
+    <sheetView tabSelected="1" workbookViewId="0">
+      <selection activeCell="A2" sqref="A2"/>
+    </sheetView>
+  </sheetViews>
+  <sheetFormatPr baseColWidth="10" defaultRowHeight="15" x14ac:dyDescent="0"/>
+  <sheetData>
+    <row spans="1:1">
+      <c t="s">
+        <v>0</v>
+      </c>
+    </row>
+    <row spans="1:1">
+      <c t="s">
+        <v>1</v>
+      </c>
+    </row>
+  </sheetData>
+  <pageMargins left="0.75" right="0.75" top="1" bottom="1" header="0.5" footer="0.5"/>
+  <pageSetup paperSize="9" orientation="portrait" horizontalDpi="4294967292" verticalDpi="4294967292"/>
+  <extLst>
+    <ext uri="{64002731-A6B0-56B0-2670-7721B7C09600}" xmlns:mx="http://schemas.microsoft.com/office/mac/excel/2008/main">
+      <mx:PLV Mode="0" OnePage="0" WScale="0"/>
+    </ext>
+  </extLst>
+</worksheet>
+`)
+		worksheet := new(xlsxWorksheet)
+		err := xml.NewDecoder(sheetxml).Decode(worksheet)
+		c.Assert(err, qt.IsNil)
+		sst := new(xlsxSST)
+		err = xml.NewDecoder(sharedstringsXML).Decode(sst)
+		c.Assert(err, qt.IsNil)
+
+		file := new(File)
+		file.cellStoreConstructor = constructor
+		file.referenceTable = MakeSharedStringRefTable(sst)
+		sheet, err := NewSheetWithCellStore("test", constructor)
+		c.Assert(err, qt.IsNil)
+		lt := make(hyperlinkTable)
+
+		err = readRowsFromSheet(worksheet, file, sheet, NoRowLimit, lt)
+		c.Assert(err, qt.IsNil)
+		c.Assert(sheet.MaxRow, qt.Equals, 2)
+		c.Assert(sheet.MaxCol, qt.Equals, 1)
+
+		row, err := sheet.Row(0)
+		c.Assert(err, qt.Equals, nil)
+		c.Assert(row.cellStoreRow.CellCount(), qt.Equals, 1)
+		if val, err := row.GetCell(0).FormattedValue(); err != nil {
+			c.Error(err)
+		} else {
+			c.Assert(val, qt.Equals, "ABC")
+		}
+
+		row, err = sheet.Row(1)
+		c.Assert(err, qt.Equals, nil)
+		c.Assert(row.cellStoreRow.CellCount(), qt.Equals, 1)
+		if val, err := row.GetCell(0).FormattedValue(); err != nil {
+			c.Error(err)
+		} else {
+			c.Assert(val, qt.Equals, "DEF")
+		}
+	})
+
 	csRunC(c, "ReadRowsFromSheetWithLeadingEmptyCols", func(c *qt.C, constructor CellStoreConstructor) {
 		var sharedstringsXML = bytes.NewBufferString(`<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="2" uniqueCount="2"><si><t>ABC</t></si><si><t>DEF</t></si></sst>`)

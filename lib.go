@@ -514,7 +514,11 @@ func readRowsFromSheet(Worksheet *xlsxWorksheet, file *File, sheet *Sheet, rowLi
 			row = makeRowFromRaw(rawrow, sheet)
 		}
 		sheet.setCurrentRow(row)
-		row.num = rawrow.R - 1
+		if rawrow.R != 0 {
+			row.num = rawrow.R - 1
+		} else {
+			row.num = rowIndex
+		}
 
 		row.Hidden = rawrow.Hidden
 		height, err := strconv.ParseFloat(rawrow.Ht, 64)
@@ -524,17 +528,20 @@ func readRowsFromSheet(Worksheet *xlsxWorksheet, file *File, sheet *Sheet, rowLi
 		row.isCustom = rawrow.CustomHeight
 		row.SetOutlineLevel(rawrow.OutlineLevel)
 
-		for _, rawcell := range rawrow.C {
+		for cellIndex, rawcell := range rawrow.C {
+			var x, y, h, v int
 			if rawcell.R == "" {
-				continue
-			}
-			h, v, err := Worksheet.MergeCells.getExtent(rawcell.R)
-			if err != nil {
-				return wrap(err)
-			}
-			x, y, err := GetCoordsFromCellIDString(rawcell.R)
-			if err != nil {
-				return wrap(err)
+				x, y = cellIndex, rowIndex
+				h, v = cellIndex, rowIndex
+			} else {
+				h, v, err = Worksheet.MergeCells.getExtent(rawcell.R)
+				if err != nil {
+					return wrap(err)
+				}
+				x, y, err = GetCoordsFromCellIDString(rawcell.R)
+				if err != nil {
+					return wrap(err)
+				}
 			}
 
 			cellX := x
@@ -559,7 +566,10 @@ func readRowsFromSheet(Worksheet *xlsxWorksheet, file *File, sheet *Sheet, rowLi
 			cell.Hidden = rawrow.Hidden || (col != nil && col.Hidden != nil && *col.Hidden)
 			cell.modified = true
 		}
-		sheet.cellStore.WriteRow(row)
+		err = sheet.cellStore.WriteRow(row)
+		if err != nil {
+			return wrap(err)
+		}
 
 		insertRowIndex++
 	}
