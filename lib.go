@@ -180,25 +180,22 @@ func getMaxMinFromDimensionRef(ref string) (minx, miny, maxx, maxy int, err erro
 // calculateMaxMinFromWorkSheet works out the dimensions of a spreadsheet
 // that doesn't have a DimensionRef set.  The only case currently
 // known where this is true is with XLSX exported from Google Docs.
-func calculateMaxMinFromWorksheet(worksheet *xlsxWorksheet) (minx, miny, maxx, maxy int, err error) {
+func calculateMaxMinFromWorksheet(worksheet *xlsxWorksheet) (minx, miny, maxx, maxy int) {
 	// Note, this method could be very slow for large spreadsheets.
 	var x, y int
+	var err error
 	var maxVal int
-
-	wrap := func(err error) (int, int, int, int, error) {
-		return -1, -1, -1, -1, fmt.Errorf("calculateMaxMinFromWorksheet: %w", err)
-	}
 
 	maxVal = int(^uint(0) >> 1)
 	minx = maxVal
 	miny = maxVal
 	maxy = 0
 	maxx = 0
-	for _, row := range worksheet.SheetData.Row {
-		for _, cell := range row.C {
+	for i, row := range worksheet.SheetData.Row {
+		for j, cell := range row.C {
 			x, y, err = GetCoordsFromCellIDString(cell.R)
 			if err != nil {
-				return wrap(err)
+				x, y = i, j
 			}
 			if x < minx {
 				minx = x
@@ -475,10 +472,7 @@ func readRowsFromSheet(Worksheet *xlsxWorksheet, file *File, sheet *Sheet, rowLi
 	if len(Worksheet.Dimension.Ref) > 0 && len(strings.Split(Worksheet.Dimension.Ref, cellRangeChar)) == 2 && rowLimit == NoRowLimit {
 		_, _, maxCol, maxRow, err = getMaxMinFromDimensionRef(Worksheet.Dimension.Ref)
 	} else {
-		_, _, maxCol, maxRow, err = calculateMaxMinFromWorksheet(Worksheet)
-	}
-	if err != nil {
-		return wrap(err)
+		_, _, maxCol, maxRow = calculateMaxMinFromWorksheet(Worksheet)
 	}
 
 	rowCount = maxRow + 1
