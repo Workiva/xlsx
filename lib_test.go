@@ -287,6 +287,9 @@ func TestLib(t *testing.T) {
       <c t="s" s="1" r="">
         <v>3</v>
       </c>
+      <c t="s" s="1" r="">
+        <v>4</v>
+      </c>
     </row>
   </sheetData>
   <drawing r:id="rId1"/>
@@ -298,7 +301,7 @@ func TestLib(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(minx, qt.Equals, 0)
 		c.Assert(miny, qt.Equals, 0)
-		c.Assert(maxx, qt.Equals, 1)
+		c.Assert(maxx, qt.Equals, 2)
 		c.Assert(maxy, qt.Equals, 1)
 	})
 
