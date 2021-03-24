@@ -195,7 +195,7 @@ func calculateMaxMinFromWorksheet(worksheet *xlsxWorksheet) (minx, miny, maxx, m
 		for j, cell := range row.C {
 			x, y, err = GetCoordsFromCellIDString(cell.R)
 			if err != nil {
-				x, y = i, j
+				x, y = j, i
 			}
 			if x < minx {
 				minx = x
