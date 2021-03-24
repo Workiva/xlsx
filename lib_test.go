@@ -656,6 +656,9 @@ func TestLib(t *testing.T) {
 		} else {
 			c.Assert(val, qt.Equals, "DEF")
 		}
+		c.Assert(row.GetCell(0).HMerge, qt.Equals, 0)
+		c.Assert(row.GetCell(0).VMerge, qt.Equals, 0)
+
 	})
 
 	csRunC(c, "ReadRowsFromSheetWithLeadingEmptyCols", func(c *qt.C, constructor CellStoreConstructor) {
