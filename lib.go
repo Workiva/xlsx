@@ -524,6 +524,8 @@ func readRowsFromSheet(Worksheet *xlsxWorksheet, file *File, sheet *Sheet, rowLi
 		height, err := strconv.ParseFloat(rawrow.Ht, 64)
 		if err == nil {
 			row.SetHeight(height)
+		} else {
+			row.SetHeight(Worksheet.SheetFormatPr.DefaultRowHeight)
 		}
 		row.isCustom = rawrow.CustomHeight
 		row.SetOutlineLevel(rawrow.OutlineLevel)
