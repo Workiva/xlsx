@@ -1,13 +1,13 @@
 # Testing with Skynet - https://github.com/Workiva/skynet/tree/master/docs
 name: xlsx-unit-tests
-image: "golang:bullseye"
+image: golang:1.18-bullseye
 description: run xlsx unit tests
 size: small
 contact: support-onecloud
 
 run:
-  on-pull-request: yes
-  on-tag: yes
+  on-pull-request: true
+  on-tag: true
   when-branch-name-is:
     - ^refs/tags/.+
     - master
