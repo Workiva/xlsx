@@ -3,6 +3,7 @@ name: xlsx-unit-tests
 image: golang:1.18-bullseye
 description: run xlsx unit tests
 size: small
+timeout: 600 # 10 minutes
 contact: support-onecloud
 
 run:
