@@ -1,0 +1,20 @@
+# Testing with Skynet - https://github.com/Workiva/skynet/tree/master/docs
+xlsx-unit-tests
+image: amazoncorretto:8
+description: run xlsx unit tests
+timeout: 300 #5 minutes
+size: small
+contact: support-onecloud
+
+run:
+  on-pull-request: yes
+  on-tag: yes
+  when-branch-name-is:
+    - ^refs/tags/.+
+    - master
+
+scripts:
+  - make test
+
+artifacts:
+  - /testing/out
