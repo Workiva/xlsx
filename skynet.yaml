@@ -1,8 +1,7 @@
 # Testing with Skynet - https://github.com/Workiva/skynet/tree/master/docs
-xlsx-unit-tests
-image: amazoncorretto:8
+name: xlsx-unit-tests
+image: golang:bullseye
 description: run xlsx unit tests
-timeout: 300 #5 minutes
 size: small
 contact: support-onecloud
 
