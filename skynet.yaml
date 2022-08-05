@@ -1,6 +1,6 @@
 # Testing with Skynet - https://github.com/Workiva/skynet/tree/master/docs
 name: xlsx-unit-tests
-image: golang:bullseye
+image: "golang:bullseye"
 description: run xlsx unit tests
 size: small
 contact: support-onecloud
