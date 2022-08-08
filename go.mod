@@ -1,4 +1,4 @@
-module github.com/OneCloudInc/xlsx/v3
+module github.com/Workiva/xlsx/v3
 
 go 1.15
 
