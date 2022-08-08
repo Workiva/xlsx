@@ -10,7 +10,6 @@ run:
   on-pull-request: true
   on-tag: true
   when-branch-name-is:
-    - ^refs/tags/.+
     - master
 
 scripts:
