@@ -5,4 +5,5 @@ xlsx.test
 *.swp
 coverage.txt
 .idea
+unit_test_report.xml
 

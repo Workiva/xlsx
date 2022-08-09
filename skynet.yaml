@@ -16,4 +16,4 @@ scripts:
   - make test
 
 artifacts:
-  - /testing/out
+  - unit_test_report.xml
