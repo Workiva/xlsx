@@ -16,4 +16,7 @@ scripts:
   - make test
 
 artifacts:
-  - /testing/out
+  - test-reports
+
+test-reports:
+  - test-reports
