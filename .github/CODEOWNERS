@@ -1,0 +1,2 @@
+# Only allow Workiva employees to alter GHA workflows
+/.github/ @Workiva/cloud42
